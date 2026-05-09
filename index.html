@@ -1,0 +1,450 @@
+<index.html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>전기차 충전소 찾기 웹</title>
+
+  <!-- 지도 라이브러리 Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f1f5f4;
+      color: #222;
+    }
+
+    header {
+      background-color: #16835c;
+      color: white;
+      text-align: center;
+      padding: 24px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+
+    header p {
+      margin-top: 8px;
+      font-size: 15px;
+    }
+
+    .container {
+      width: 90%;
+      max-width: 1100px;
+      margin: 25px auto;
+    }
+
+    .search-box {
+      background-color: white;
+      padding: 18px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      margin-bottom: 18px;
+    }
+
+    select,
+    input,
+    button {
+      padding: 10px;
+      font-size: 15px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      margin: 4px;
+    }
+
+    input {
+      width: 260px;
+    }
+
+    button {
+      background-color: #16835c;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background-color: #0f6042;
+    }
+
+    #message {
+      margin-top: 10px;
+      color: #555;
+      line-height: 1.5;
+    }
+
+    #map {
+      height: 420px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    #count {
+      font-size: 20px;
+      margin-bottom: 12px;
+    }
+
+    .card-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 15px;
+    }
+
+    .card {
+      background-color: white;
+      padding: 17px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+      line-height: 1.6;
+    }
+
+    .card h3 {
+      margin-top: 0;
+      color: #16835c;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .green {
+      background-color: #d8f5e5;
+      color: #087a3e;
+    }
+
+    .yellow {
+      background-color: #fff1cc;
+      color: #9a6a00;
+    }
+
+    .red {
+      background-color: #ffdada;
+      color: #b00020;
+    }
+
+    .gray {
+      background-color: #eeeeee;
+      color: #555;
+    }
+
+    footer {
+      text-align: center;
+      color: #666;
+      padding: 20px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <h1>전기차 충전소 찾기 웹</h1>
+  <p>공공데이터포털 API 인증키를 활용한 충전소 위치 검색 서비스</p>
+</header>
+
+<div class="container">
+
+  <div class="search-box">
+    <h2>충전소 검색</h2>
+
+    <select id="region">
+      <option value="52" selected>전북특별자치도</option>
+      <option value="11">서울특별시</option>
+      <option value="41">경기도</option>
+      <option value="26">부산광역시</option>
+      <option value="27">대구광역시</option>
+      <option value="28">인천광역시</option>
+      <option value="29">광주광역시</option>
+      <option value="30">대전광역시</option>
+      <option value="50">제주특별자치도</option>
+    </select>
+
+    <input type="text" id="keyword" placeholder="예: 전주, 시청, 아파트">
+
+    <button onclick="searchChargers()">검색</button>
+
+    <p id="message">검색 버튼을 눌러 충전소를 찾아보세요.</p>
+  </div>
+
+  <div id="map"></div>
+
+  <h2 id="count">검색 결과: 0개</h2>
+
+  <div class="card-list" id="result"></div>
+
+</div>
+
+<footer>
+  한국환경공단 전기자동차 충전소 정보 API 활용
+</footer>
+
+<!-- 지도 JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+  // =====================================================
+  // 1. 공공데이터포털 인증키
+  // =====================================================
+  const SERVICE_KEY = "7f289808366c14da8be96529d6c468dcfec6187f0c9848ddfbbe8151242bada6";
+
+  // 공식 API 주소
+  const API_URL = "http://apis.data.go.kr/B552584/EvCharger/getChargerInfo";
+
+  let map;
+  let markers = [];
+
+  // =====================================================
+  // 2. API 오류가 날 때 보여줄 예시 데이터
+  // =====================================================
+  const sampleData = [
+    {
+      statNm: "전주시청 전기차 충전소",
+      addr: "전북특별자치도 전주시 완산구 노송광장로 10",
+      chgerType: "DC콤보",
+      stat: "2",
+      busiNm: "환경부",
+      useTime: "24시간 이용 가능",
+      output: "100",
+      lat: "35.8242",
+      lng: "127.1480"
+    },
+    {
+      statNm: "전주역 공영주차장 충전소",
+      addr: "전북특별자치도 전주시 덕진구 동부대로 680",
+      chgerType: "AC완속",
+      stat: "3",
+      busiNm: "한국전력",
+      useTime: "09:00~18:00",
+      output: "7",
+      lat: "35.8495",
+      lng: "127.1615"
+    },
+    {
+      statNm: "전북대학교 전기차 충전소",
+      addr: "전북특별자치도 전주시 덕진구 백제대로 567",
+      chgerType: "DC콤보",
+      stat: "2",
+      busiNm: "환경부",
+      useTime: "24시간 이용 가능",
+      output: "50",
+      lat: "35.8468",
+      lng: "127.1293"
+    },
+    {
+      statNm: "한옥마을 공영주차장 충전소",
+      addr: "전북특별자치도 전주시 완산구 기린대로 99",
+      chgerType: "AC완속",
+      stat: "5",
+      busiNm: "전주시",
+      useTime: "24시간 이용 가능",
+      output: "7",
+      lat: "35.8151",
+      lng: "127.1534"
+    }
+  ];
+
+  // =====================================================
+  // 3. 지도 처음 만들기
+  // =====================================================
+  function initMap() {
+    map = L.map("map").setView([35.8242, 127.1480], 12);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap"
+    }).addTo(map);
+  }
+
+  // =====================================================
+  // 4. 검색 버튼 클릭 시 실행
+  // =====================================================
+  async function searchChargers() {
+    const region = document.getElementById("region").value;
+    const keyword = document.getElementById("keyword").value.trim();
+    const message = document.getElementById("message");
+
+    message.innerText = "공공데이터 API를 호출하는 중입니다...";
+
+    const url =
+      API_URL +
+      "?ServiceKey=" + encodeURIComponent(SERVICE_KEY) +
+      "&pageNo=1" +
+      "&numOfRows=200" +
+      "&zcode=" + region;
+
+    try {
+      const response = await fetch(url);
+      const text = await response.text();
+
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(text, "text/xml");
+
+      const items = xml.querySelectorAll("item");
+
+      let data = [];
+
+      items.forEach(item => {
+        const lat = getText(item, "lat");
+        const lng = getText(item, "lng");
+
+        if (lat !== "" && lng !== "") {
+          data.push({
+            statNm: getText(item, "statNm"),
+            addr: getText(item, "addr"),
+            chgerType: changeType(getText(item, "chgerType")),
+            stat: getText(item, "stat"),
+            busiNm: getText(item, "busiNm"),
+            useTime: getText(item, "useTime"),
+            output: getText(item, "output"),
+            lat: lat,
+            lng: lng
+          });
+        }
+      });
+
+      if (data.length === 0) {
+        message.innerText = "API 데이터가 없거나 호출이 막혀 예시 데이터를 지도에 표시합니다.";
+        data = sampleData;
+      } else {
+        message.innerText = "공공데이터 API에서 충전소 정보를 불러왔습니다.";
+      }
+
+      showData(data, keyword);
+
+    } catch (error) {
+      message.innerText = "API 오류가 발생해서 예시 데이터를 지도에 표시합니다.";
+      showData(sampleData, keyword);
+    }
+  }
+
+  // =====================================================
+  // 5. 카드와 지도에 데이터 표시
+  // =====================================================
+  function showData(data, keyword) {
+    const result = document.getElementById("result");
+    const count = document.getElementById("count");
+
+    result.innerHTML = "";
+    clearMarkers();
+
+    const filtered = data.filter(item => {
+      return keyword === "" ||
+             item.statNm.includes(keyword) ||
+             item.addr.includes(keyword);
+    });
+
+    count.innerText = "검색 결과: " + filtered.length + "개";
+
+    if (filtered.length === 0) {
+      result.innerHTML = "<p>검색 결과가 없습니다.</p>";
+      return;
+    }
+
+    filtered.forEach(item => {
+      // 카드 만들기
+      const card = document.createElement("div");
+      card.className = "card";
+
+      card.innerHTML = `
+        <h3>${item.statNm}</h3>
+        <span class="badge ${getColor(item.stat)}">${getStatus(item.stat)}</span>
+        <p><b>주소:</b> ${item.addr}</p>
+        <p><b>충전기 타입:</b> ${item.chgerType}</p>
+        <p><b>운영기관:</b> ${item.busiNm || "정보 없음"}</p>
+        <p><b>이용시간:</b> ${item.useTime || "정보 없음"}</p>
+        <p><b>출력:</b> ${item.output || "정보 없음"} kW</p>
+      `;
+
+      result.appendChild(card);
+
+      // 지도 마커 만들기
+      const marker = L.marker([Number(item.lat), Number(item.lng)]).addTo(map);
+
+      marker.bindPopup(`
+        <b>${item.statNm}</b><br>
+        ${item.addr}<br>
+        상태: ${getStatus(item.stat)}<br>
+        타입: ${item.chgerType}
+      `);
+
+      markers.push(marker);
+    });
+
+    // 첫 번째 충전소 위치로 지도 이동
+    map.setView([Number(filtered[0].lat), Number(filtered[0].lng)], 13);
+  }
+
+  // =====================================================
+  // 6. 기존 지도 마커 삭제
+  // =====================================================
+  function clearMarkers() {
+    markers.forEach(marker => {
+      map.removeLayer(marker);
+    });
+
+    markers = [];
+  }
+
+  // =====================================================
+  // 7. XML 태그 값 가져오기
+  // =====================================================
+  function getText(item, tagName) {
+    const tag = item.querySelector(tagName);
+    return tag ? tag.textContent : "";
+  }
+
+  // =====================================================
+  // 8. 충전 상태 표시
+  // =====================================================
+  function getStatus(stat) {
+    if (stat === "1") return "통신이상";
+    if (stat === "2") return "충전대기";
+    if (stat === "3") return "충전중";
+    if (stat === "4") return "운영중지";
+    if (stat === "5") return "점검중";
+    if (stat === "9") return "상태미확인";
+    return "정보 없음";
+  }
+
+  function getColor(stat) {
+    if (stat === "2") return "green";
+    if (stat === "3") return "yellow";
+    if (stat === "4" || stat === "5") return "red";
+    return "gray";
+  }
+
+  // =====================================================
+  // 9. 충전기 타입 변환
+  // =====================================================
+  function changeType(type) {
+    if (type === "01") return "DC차데모";
+    if (type === "02") return "AC완속";
+    if (type === "03") return "DC차데모 + AC3상";
+    if (type === "04") return "DC콤보";
+    if (type === "05") return "DC차데모 + DC콤보";
+    if (type === "06") return "DC차데모 + AC3상 + DC콤보";
+    if (type === "07") return "AC3상";
+    if (type === "08") return "DC콤보 완속";
+    if (type === "09") return "NACS";
+    return "정보 없음";
+  }
+
+  // 페이지가 열리면 지도 먼저 만들기
+  window.onload = function() {
+    initMap();
+  };
+</script>
+
+</body>
+</html>
