@@ -1,4 +1,4 @@
-<index.html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
@@ -150,8 +150,8 @@
 <body>
 
 <header>
-  <h1>전기차 충전소 찾기 웹</h1>
-  <p>공공데이터포털 API 인증키를 활용한 충전소 위치 검색 서비스</p>
+  <h1>EV Charge Finder</h1>
+  <p>공공데이터포털 API 인증키를 활용한 전기차 충전소 위치 검색 서비스</p>
 </header>
 
 <div class="container">
@@ -196,8 +196,9 @@
 <script>
   // =====================================================
   // 1. 공공데이터포털 인증키
+  // GitHub에 공개할 경우 인증키가 노출될 수 있습니다.
   // =====================================================
-  const SERVICE_KEY = "7f289808366c14da8be96529d6c468dcfec6187f0c9848ddfbbe8151242bada6";
+  const SERVICE_KEY = "여기에_본인_공공데이터포털_인증키_입력";
 
   // 공식 API 주소
   const API_URL = "http://apis.data.go.kr/B552584/EvCharger/getChargerInfo";
@@ -352,7 +353,6 @@
     }
 
     filtered.forEach(item => {
-      // 카드 만들기
       const card = document.createElement("div");
       card.className = "card";
 
@@ -368,7 +368,6 @@
 
       result.appendChild(card);
 
-      // 지도 마커 만들기
       const marker = L.marker([Number(item.lat), Number(item.lng)]).addTo(map);
 
       marker.bindPopup(`
@@ -381,7 +380,6 @@
       markers.push(marker);
     });
 
-    // 첫 번째 충전소 위치로 지도 이동
     map.setView([Number(filtered[0].lat), Number(filtered[0].lng)], 13);
   }
 
